@@ -119,9 +119,16 @@ function revision() {
 }
 
 if ! { [[ "$1" == "test" ]] && cd "$gpath/git-db"; }; then
-    DB_VERSION_NEW=$(curl --silent --show-error "https://raw.githubusercontent.com/wiedehopf/tar1090-db/master/version")
-    if  [[ "$(cat "$gpath/git-db/version" 2>/dev/null)" != "$DB_VERSION_NEW" ]]; then
-        getGIT "$db_repo" "master" "$gpath/git-db" || true
+    if DB_VERSION_NEW=$(curl --silent --show-error --fail --retry 3 --retry-delay 2 --max-time 10 "https://raw.githubusercontent.com/wiedehopf/tar1090-db/master/version"); then
+        if [[ -n "$DB_VERSION_NEW" ]]; then
+            if  [[ "$(cat "$gpath/git-db/version" 2>/dev/null)" != "$DB_VERSION_NEW" ]]; then
+                getGIT "$db_repo" "master" "$gpath/git-db" || true
+            fi
+        else
+            echo "Error: tar1090-db version response was empty, skipping update." 1>&2
+        fi
+    else
+        echo "Error: failed to fetch tar1090-db version, skipping update." 1>&2
     fi
 fi
 
@@ -146,12 +153,19 @@ if [[ "$1" == "test" ]] || [[ -n "$git_source" ]]; then
     cd "$gpath/git"
     TAR_VERSION="$(cat version)_dirty"
 else
-    VERSION_NEW=$(curl --silent --show-error "https://raw.githubusercontent.com/wiedehopf/tar1090/master/version")
-    if  [[ "$(cat "$gpath/git/version" 2>/dev/null)" != "$VERSION_NEW" ]]; then
-        if ! getGIT "$repo" "master" "$gpath/git"; then
-            echo "Unable to download files, exiting! (Maybe try again?)"
-            exit 1
+    if VERSION_NEW=$(curl --silent --show-error --fail --retry 3 --retry-delay 2 --max-time 10 "https://raw.githubusercontent.com/wiedehopf/tar1090/master/version"); then
+        if [[ -n "$VERSION_NEW" ]]; then
+            if  [[ "$(cat "$gpath/git/version" 2>/dev/null)" != "$VERSION_NEW" ]]; then
+                if ! getGIT "$repo" "master" "$gpath/git"; then
+                    echo "Unable to download files, exiting! (Maybe try again?)"
+                    exit 1
+                fi
+            fi
+        else
+            echo "Error: tar1090 version response was empty, skipping update." 1>&2
         fi
+    else
+        echo "Error: failed to fetch tar1090 version, skipping update." 1>&2
     fi
     if ! cd "$gpath/git"; then
         echo "Unable to download files, exiting! (Maybe try again?)"
@@ -496,4 +510,3 @@ elif [[ $nginx == yes ]]; then
 else
     echo "All done! You'll need to configure your webserver yourself, see ${ipath}/nginx-tar1090.conf for a reference nginx configuration"
 fi
-
