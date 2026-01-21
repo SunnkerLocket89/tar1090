@@ -119,9 +119,12 @@ function revision() {
 }
 
 if ! { [[ "$1" == "test" ]] && cd "$gpath/git-db"; }; then
-    DB_VERSION_NEW=$(curl --silent --show-error "https://raw.githubusercontent.com/wiedehopf/tar1090-db/master/version")
-    if  [[ "$(cat "$gpath/git-db/version" 2>/dev/null)" != "$DB_VERSION_NEW" ]]; then
+    DB_VERSION_NEW=$(curl --fail --silent --show-error --retry 3 --retry-delay 2 --max-time 10 \
+        "https://raw.githubusercontent.com/wiedehopf/tar1090-db/master/version" || true)
+    if [[ -n "$DB_VERSION_NEW" ]] && [[ "$(cat "$gpath/git-db/version" 2>/dev/null)" != "$DB_VERSION_NEW" ]]; then
         getGIT "$db_repo" "master" "$gpath/git-db" || true
+    elif [[ -z "$DB_VERSION_NEW" ]]; then
+        echo "Warning: Unable to fetch tar1090-db version, skipping update check."
     fi
 fi
 
@@ -146,12 +149,15 @@ if [[ "$1" == "test" ]] || [[ -n "$git_source" ]]; then
     cd "$gpath/git"
     TAR_VERSION="$(cat version)_dirty"
 else
-    VERSION_NEW=$(curl --silent --show-error "https://raw.githubusercontent.com/wiedehopf/tar1090/master/version")
-    if  [[ "$(cat "$gpath/git/version" 2>/dev/null)" != "$VERSION_NEW" ]]; then
+    VERSION_NEW=$(curl --fail --silent --show-error --retry 3 --retry-delay 2 --max-time 10 \
+        "https://raw.githubusercontent.com/wiedehopf/tar1090/master/version" || true)
+    if [[ -n "$VERSION_NEW" ]] && [[ "$(cat "$gpath/git/version" 2>/dev/null)" != "$VERSION_NEW" ]]; then
         if ! getGIT "$repo" "master" "$gpath/git"; then
             echo "Unable to download files, exiting! (Maybe try again?)"
             exit 1
         fi
+    elif [[ -z "$VERSION_NEW" ]]; then
+        echo "Warning: Unable to fetch tar1090 version, skipping update check."
     fi
     if ! cd "$gpath/git"; then
         echo "Unable to download files, exiting! (Maybe try again?)"
@@ -487,13 +493,12 @@ echo --------------
 
 if [[ $lighttpd == yes ]]; then
     for name in $names; do
-        echo "All done! Webinterface available at http://$(ip route get 1.2.3.4 | grep -m1 -o -P 'src \K[0-9,.]*')/$name"
+        echo "All done! Webinterface available at http://$(ip -o -4 route get 1.2.3.4 | awk '{for (i=1;i<=NF;i++) if ($i=="src"){print $(i+1); exit}}')/$name"
     done
 elif [[ $nginx == yes ]]; then
     for name in $names; do
-        echo "All done! Webinterface once nginx is configured will be available at http://$(ip route get 1.2.3.4 | grep -m1 -o -P 'src \K[0-9,.]*')/$name"
+        echo "All done! Webinterface once nginx is configured will be available at http://$(ip -o -4 route get 1.2.3.4 | awk '{for (i=1;i<=NF;i++) if ($i=="src"){print $(i+1); exit}}')/$name"
     done
 else
     echo "All done! You'll need to configure your webserver yourself, see ${ipath}/nginx-tar1090.conf for a reference nginx configuration"
 fi
-
